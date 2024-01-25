@@ -1,41 +1,67 @@
 #!/usr/bin/env bash
 
-ip=$(curl -s http://myip.ipip.net)
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
 
-env
+info() {
+    date=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${date}  INFO    ${1}"
+}
 
-echo $1;
+debug(){
+    date=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${date}  DEBUG   ${1}"
+}
 
-cat /etc/environment
+warn(){
+    date=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${date}  ${yellow}WARN    ${1}${plain}"
+}
+
+error(){
+    date=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${date}  ${red}ERROR  ${1}${plain}"
+}
+
+ip=$(curl -s http://myip.chaobei.xyz)
 
 if [[ $ip =~ [0-9.]+ ]]; 
 then 
-  echo "Your ip address "${BASH_REMATCH[0]}
+  info "Your ip address "${BASH_REMATCH[0]}
   ipaddress=${BASH_REMATCH[0]}
 else 
   exit 0
 fi
 
-aliyun alidns DescribeSubDomainRecords --region cn-chengdu --SubDomain ${DOMAIN} > record.json
-cat record.json
+getRecordInfo(){
 
-Value=$(jq --raw-output '.DomainRecords.Record|.[0].Value' record.json)
+  DOMAIN=$1
+  aliyun alidns DescribeSubDomainRecords --region cn-chengdu --SubDomain ${DOMAIN} > record.json || exit 1
+  Value=$(jq --raw-output '.DomainRecords.Record|.[0].Value' record.json)
 
-if [[ $Value == $ipaddress ]];
-then
-  echo "Ip is not changed. exit."
-  exit 0
-fi
+  info "Domain: ${DOMAIN} record Ip is ${Value}"
 
+  if [[ $Value == $ipaddress ]];
+  then
+    info "Ip is not changed. exit."
+    return 1
+  fi
 
-recordId=$(jq --raw-output '.DomainRecords.Record|.[0].RecordId' record.json)
-RR=$(jq --raw-output '.DomainRecords.Record|.[0].RR' record.json)
-Type=$(jq --raw-output '.DomainRecords.Record|.[0].Type' record.json)
+  return 0
+}
 
-echo $recordId
-echo $RR
-echo $Type
+updateRecord(){
 
-aliyun alidns UpdateDomainRecord --region cn-chengdu --RecordId $recordId --RR $RR --Type $Type --Value ${ipaddress}
+  recordId=$(jq --raw-output '.DomainRecords.Record|.[0].RecordId' record.json)
+  RR=$(jq --raw-output '.DomainRecords.Record|.[0].RR' record.json)
+  Type=$(jq --raw-output '.DomainRecords.Record|.[0].Type' record.json)
 
-echo "Success"
+  aliyun alidns UpdateDomainRecord --region cn-chengdu --RecordId $recordId --RR $RR --Type $Type --Value ${ipaddress} && info "Update Success"
+}
+
+export IFS=";"
+for DOMAIN in $DOMAINS; do
+  getRecordInfo $DOMAIN && updateRecord
+done
