@@ -37,6 +37,8 @@ fi
 
 getRecordInfo(){
 
+  sleep 2
+  
   DOMAIN=$1
   aliyun alidns DescribeSubDomainRecords --region cn-chengdu --SubDomain ${DOMAIN} > record.json || exit 1
   Value=$(jq --raw-output '.DomainRecords.Record|.[0].Value' record.json)
